@@ -1,39 +1,169 @@
+import numpy as np
 import tensorflow as tf
 import tensorlayer as tl
 from tensorlayer.layers import *
 from tensorlayer.models import Model
+from tensorlayer import logging
 
 from params import *
 
 lrelu = lambda x: tl.act.lrelu(x, 0.2)
 
+class DeConv1d(Layer):
+    """Simplified version of :class:`DeConv1dLayer`, see `tf.nn.conv1d_transpose <https://tensorflow.google.cn/versions/r2.0/api_docs/python/tf/nn/conv1d_transpose>`__.
+
+    Parameters
+    ----------
+    n_filter : int
+        The number of filters.
+    filter_size : tuple of int
+        The filter size width.
+    strides : tuple of int
+        The stride step width.
+    padding : str
+        The padding algorithm type: "SAME" or "VALID".
+    act : activation function
+        The activation function of this layer.
+    data_format : str
+        "channels_last" (NHWC, default) or "channels_first" (NCHW).
+    dilation_rate : int of tuple of int
+        The dilation rate to use for dilated convolution
+    W_init : initializer
+        The initializer for the weight matrix.
+    b_init : initializer or None
+        The initializer for the bias vector. If None, skip biases.
+    in_channels : int
+        The number of in channels.
+    name : None or str
+        A unique layer name.
+
+    Examples
+    --------
+    With TensorLayer
+
+    >>> net = tl.layers.Input([5, 100, 100, 32], name='input')
+    >>> deconv2d = tl.layers.DeConv2d(n_filter=32, filter_size=(3, 3), strides=(2, 2), in_channels=32, name='DeConv2d_1')
+    >>> print(deconv2d)
+    >>> tensor = tl.layers.DeConv2d(n_filter=32, filter_size=(3, 3), strides=(2, 2), name='DeConv2d_2')(net)
+    >>> print(tensor)
+
+    """
+
+    def __init__(
+        self,
+        n_filter=32,
+        filter_size=3,
+        strides=2,
+        act=None,
+        padding='SAME',
+        dilation_rate=1,
+        data_format='channels_last',
+        W_init=tl.initializers.truncated_normal(stddev=0.02),
+        b_init=tl.initializers.constant(value=0.0),
+        in_channels=None,
+        name=None  # 'decnn2d'
+    ):
+        super().__init__(name, act=act)
+        self.n_filter = n_filter
+        self.filter_size = filter_size
+        self.strides = strides
+        self.padding = padding
+        self.data_format = data_format
+        self.dilation_rate = dilation_rate
+        self.W_init = W_init
+        self.b_init = b_init
+        self.in_channels = in_channels
+
+        # Attention: To build, we need not only the in_channels!
+        # if self.in_channels:
+        #     self.build(None)
+        #     self._built = True
+
+        logging.info(
+            "DeConv1d {}: n_filters: {} strides: {} padding: {} act: {} dilation: {}".format(
+                self.name,
+                str(n_filter),
+                str(strides),
+                padding,
+                self.act.__name__ if self.act is not None else 'No Activation',
+                dilation_rate,
+            )
+        )
+
+        if type(strides) != int:
+            raise ValueError("type(strides) should be int... Like in tensorflow")
+
+    def __repr__(self):
+        actstr = self.act.__name__ if self.act is not None else 'No Activation'
+        s = (
+            '{classname}(in_channels={in_channels}, out_channels={n_filter}, kernel_size={filter_size}'
+            ', strides={strides}, padding={padding}'
+        )
+        if self.dilation_rate != 1:
+            s += ', dilation={dilation_rate}'
+        if self.b_init is None:
+            s += ', bias=False'
+        s += (', ' + actstr)
+        if self.name is not None:
+            s += ', name=\'{name}\''
+        s += ')'
+        return s.format(classname=self.__class__.__name__, **self.__dict__)
+
+    def build(self, inputs_shape):
+        self.layer = tf.keras.layers.Conv1DTranspose(
+            filters=self.n_filter,
+            kernel_size=self.filter_size,
+            strides=self.strides,
+            padding=self.padding,
+            data_format=self.data_format,
+            dilation_rate=self.dilation_rate,
+            activation=self.act,
+            use_bias=(True if self.b_init is not None else False),
+            kernel_initializer=self.W_init,
+            bias_initializer=self.b_init,
+            # dtype=tf.float32,
+            name=self.name,
+        )
+        if self.data_format == "channels_first":
+            self.in_channels = inputs_shape[1]
+        else:
+            self.in_channels = inputs_shape[-1]
+        _out = self.layer(
+            tf.convert_to_tensor(np.random.uniform(size=inputs_shape), dtype=np.float32)
+        )  #np.random.uniform([1] + list(inputs_shape)))  # initialize weights
+        outputs_shape = _out.shape
+        self._trainable_weights = self.layer.weights
+
+    def forward(self, inputs):
+        outputs = self.layer(inputs)
+        return outputs
 
 tf.config.experimental.set_memory_growth(gpu, True)
 def residual(R, n_f, f_s):
 	w_init = tl.initializers.truncated_normal(stddev=0.01)
 	R_tmp = R
-	R = BatchNorm2d(act=tf.nn.relu)(Conv2d(n_f, (f_s, f_s), (1, 1), W_init=w_init)(R))
-	R = BatchNorm2d(act=None)(Conv2d(n_f, (f_s, f_s), (1, 1), W_init=w_init)(R))
-	R_tmp = Conv2d(n_f, (1, 1), (1, 1))(R_tmp)
+	R = BatchNorm1d(act=tf.nn.relu)(Conv1d(n_f, f_s, 1, W_init=w_init)(R))
+	R = BatchNorm1d(act=None)(Conv1d(n_f, f_s, 1, W_init=w_init)(R))
+	R_tmp = Conv1d(n_f, 1, 1)(R_tmp)
 	return Elementwise(tf.add, act=tf.nn.relu)([R_tmp, R])
 
 
 def Discriminator(input_shape, prefix = ""):
 	I = Input(input_shape)
-	D = Conv2d(
-		64, (4, 4), (2, 2), padding='SAME', act=lrelu, b_init=None, name=prefix+'D_conv_1')(I)
-	D = InstanceNorm2d(act=lrelu)(Conv2d(
-		128, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_2')(D))
-	D = InstanceNorm2d(act=lrelu)(Conv2d(
-		256, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_3')(D))
+	D = Conv1d(
+		64, 4, 2, padding='SAME', act=lrelu, b_init=None, name=prefix+'D_conv_1')(I)
+	D = InstanceNorm1d(act=lrelu)(Conv1d(
+		128, 4, 2, padding='SAME', b_init=None, name=prefix+'D_conv_2')(D))
+	D = InstanceNorm1d(act=lrelu)(Conv1d(
+		256, 4, 2, padding='SAME', b_init=None, name=prefix+'D_conv_3')(D))
 	#D = InstanceNorm2d(act=lrelu)(Conv2d(
 	#	512, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_4')(D))
 	#D = InstanceNorm2d(act=lrelu)(Conv2d(
 	#	512, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_5')(D))
 	#D = InstanceNorm2d(act=lrelu)(Conv2d(
 	#	512, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_6')(D))
-	D = Conv2d(1, (4, 4), (1, 1), name=prefix+'D_conv_7')(D)
-	D = GlobalMeanPool2d()(D)
+	D = Conv1d(1, 4, 1, name=prefix+'D_conv_7')(D)
+	D = GlobalMeanPool1d()(D)
 	D_net = Model(inputs=I, outputs=D, name=prefix+'Discriminator')
 	return D_net
 
@@ -42,43 +172,47 @@ def Generator(input_shape, z_dim, prefix = ""):
 	w_init = tl.initializers.truncated_normal(stddev=0.01)
 	I = Input(input_shape)
 	Z = Input([input_shape[0], z_dim])
-	z = Reshape((input_shape[0], 1, 1, -1))(Z)
-	z = Tile([1, input_shape[1], input_shape[2], 1])(z)
+	# read reshape and tile
+	#z = Reshape((input_shape[0], 1, 1, -1))(Z)
+	z = Reshape((input_shape[0], 1, -1))(Z)
+	z = Tile([1, input_shape[1], 1])(z)
 
+	print('MICAEL: I, z', I.shape, z.shape)
 	conv_layers = []
 	G = Concat(concat_dim=-1)([I, z])
+	print('MICAEL: I, z, G', I.shape, z.shape, G.shape)
 	filters = [64, 128, 256]#, 512, 512, 512, 512]
 	if image_size == 256:
 		filters.append(512)
-	G = Conv2d(
-		filters[0], (4, 4), (2, 2), act=lrelu, W_init=w_init, b_init=None, name=prefix+'G_conv_1')(G)
+	G = Conv1d(
+		filters[0], 4, 2, act=lrelu, W_init=w_init, b_init=None, name=prefix+'G_conv_1')(G)
 	conv_layers.append(G)
 	for i, n_f in enumerate(filters[1:]):
-		G = BatchNorm2d(act=lrelu)(Conv2d(
-			n_f, (4, 4), (2, 2), W_init=w_init, b_init=None, name=prefix+'G_conv_{}'.format(i + 2))(G))
+		G = BatchNorm1d(act=lrelu)(Conv1d(
+			n_f, 4, 2, W_init=w_init, b_init=None, name=prefix+'G_conv_{}'.format(i + 2))(G))
 		conv_layers.append(G)
 
 	filters.pop()
 	filters.reverse()
 	conv_layers.pop()
 	for i, n_f in enumerate(filters):
-		G = BatchNorm2d(act=tf.nn.relu)(DeConv2d(
-			n_f, (4, 4), (2, 2), W_init=w_init, b_init=None, name=prefix+'G_deconv_{}'.format(len(filters)+1-i))(G))
+		G = BatchNorm1d(act=tf.nn.relu)(DeConv1d(
+			n_f, 4, 2, W_init=w_init, b_init=None, name=prefix+'G_deconv_{}'.format(len(filters)+1-i))(G))
 		G = Concat(concat_dim=-1)([G, conv_layers.pop()])
-	G = DeConv2d(3, (4, 4), (2, 2), act=tf.nn.tanh, W_init=w_init, b_init=None, name=prefix+'G_deconv_1')(G)
+	G = DeConv1d(3, 4, 2, act=tf.nn.tanh, W_init=w_init, b_init=None, name=prefix+'G_deconv_1')(G)
 	G_net = Model(inputs=[I, Z], outputs=G, name=prefix+'Generator')
 	return G_net
 
 
 def Encoder(input_shape, z_dim, prefix=""):
 	I = Input(input_shape)
-	E = Conv2d(64, (4, 4), (2, 2), act=lrelu, name=prefix+'E_conv_1')(I)
-	E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 128, 3))
-	E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 256, 3))
+	E = Conv1d(64, 4, 2, act=lrelu, name=prefix+'E_conv_1')(I)
+	E = MeanPool1d(2, 2, 'SAME')(residual(E, 128, 3))
+	E = MeanPool1d(2, 2, 'SAME')(residual(E, 256, 3))
 	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
 	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
 	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
-	E = Flatten()(MeanPool2d((8, 8), (8, 8), 'SAME')(E))
+	E = Flatten()(MeanPool1d(8, 8, 'SAME')(E))
 	mu = Dense(z_dim)(E)
 	log_sigma = Dense(z_dim)(E)
 	z = Elementwise(tf.add)(
