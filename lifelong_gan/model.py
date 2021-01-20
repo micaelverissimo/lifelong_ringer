@@ -206,7 +206,9 @@ def Generator(input_shape, z_dim, prefix = ""):
 
 def Encoder(input_shape, z_dim, prefix=""):
 	I = Input(input_shape)
+	print('ENCODER, I ', I.shape)
 	E = Conv1d(64, 4, 2, act=lrelu, name=prefix+'E_conv_1')(I)
+	print('E shape: ', E.shape)
 	E = MeanPool1d(2, 2, 'SAME')(residual(E, 128, 3))
 	E = MeanPool1d(2, 2, 'SAME')(residual(E, 256, 3))
 	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
@@ -246,6 +248,7 @@ class BicycleGAN(object):
 		tl.files.save_npz(self.E.all_weights, os.path.join(models_dir, "E_weights_{}.npz".format(model_tag)))
 
 	def calc_loss(self, image_A, image_B, z):
+		print('MICA, imagem_B', image_B.shape)
 		encoded_z, encoded_mu, encoded_log_sigma = self.E(image_B)
 		vae_img = self.G([image_A, encoded_z])
 		lr_img = self.G([image_A, z])

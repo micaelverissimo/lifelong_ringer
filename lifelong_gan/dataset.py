@@ -1,35 +1,54 @@
 import multiprocessing
 
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from imageio import imwrite
 
 from loader import load_images
 from params import *
 
-dataset_dir = "./data"
+dataset_dir = "../data/raw"
+
+aux_dict = {
+	'low_mu'  : ('cond_low_mu_data17_trn_data.csv', 'low_mu_data17_trn_data.csv'),
+	'high_mu' : ('cond_high_mu_data17_trn_data.csv', 'high_mu_data17_trn_data.csv'),
+
+}
 
 class DataGenerator(object):
 	def __init__(self, dataset_name, mode):
 		self.mode = mode
+		self.df_list = [[], []]
 		if isinstance(dataset_name, list):
-			self.images = [[], []]
 			for sub_name in dataset_name:
-				image_A, image_B = load_images(os.path.join(dataset_dir, sub_name), mode, sub_name in ["facades", "cityscapes"])
-				self.images[0].extend(image_A)
-				self.images[1].extend(image_B)
-			images = list(zip(self.images[0], self.images[1]))
-			np.random.shuffle(images)
-			self.images[0], self.images[1] = zip(*images)
+				A_name, B_name = aux_dict[sub_name]
+				self.df_list[0].append(pd.read_csv(os.path.join(dataset_dir, A_name)))
+				self.df_list[1].append(pd.read_csv(os.path.join(dataset_dir, B_name)))
+			
+			# transform in an unique df
+			self.A_df = pd.concat(self.df_list[0])
+			self.B_df = pd.concat(self.df_list[1])
+
+			idx = np.random.permutation(self.A_df.index)
+			self.A_df = self.A_df.loc[idx]
+			self.B_df = self.B_df.loc[idx]
 		else:
-			self.images = load_images(os.path.join(dataset_dir, dataset_name), mode, dataset_name in ["facades", "cityscapes"])
+			A_name, B_name = aux_dict[dataset_name]
+			self.A_df = pd.read_csv(os.path.join(dataset_dir, A_name))
+			self.B_df = pd.read_csv(os.path.join(dataset_dir, B_name))
+
+			# shuffle
+			idx = np.random.permutation(self.A_df.index)
+			self.A_df = self.A_df.loc[idx]
+			self.B_df = self.B_df.loc[idx]
 
 	def __len__(self):
-		return len(self.images[0])
+		return len(self.A_df)
 
 	def generator(self):
-		for imgA, imgB in zip(self.images[0], self.images[1]):
-			yield imgA, imgB
+		for (_, Asample), (_, Bsample) in zip(self.A_df.iterrows(), self.B_df.iterrows()):
+			yield Asample.values[None, :].T, Bsample.values[None, :].T
 
 	def _map_fn(self, image_A, image_B):
 		patch_pnum = image_size // patch_size
@@ -57,9 +76,9 @@ class DataGenerator(object):
 		return data
 
 if __name__ == '__main__':
-	data = DataGenerator('edges2shoes', 'train')
+	data = DataGenerator(['low_mu','high_mu'], 'train')
 	print("*")
-	for i, (a, b, c, d) in zip(range(20), data(1, use_aux=True)):
+	for i, ( a, b) in zip(range(20), data(1, use_aux=False)):
 		print(i)
-		print(np.shape(d))
-		imwrite("samples/aux_AB{}.png".format(i), np.concatenate([c[0], d[0]], 1))
+		print(np.shape(a))
+		#imwrite("samples/aux_AB{}.png".format(i), np.concatenate([c[0], d[0]], 1))

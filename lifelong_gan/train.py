@@ -29,7 +29,9 @@ def train_one_task(train_data, task = "", use_aux_data = False):
 	epoch = 0
 	num_images = len(train_data)
 	t = trange(0, num_images * epochs, batch_size)
-
+	
+	vae_gen_samples = []
+	lr_gen_samples  = []
 	for step, _ in zip(t, train_data(batch_size, shuffle=False, use_aux=use_aux_data)):
 		global_step += 1
 		if use_aux_data:
@@ -84,8 +86,8 @@ def train_one_task(train_data, task = "", use_aux_data = False):
 			tf.summary.scalar("loss/loss_dl", loss_dl, global_step)
 
 		if step % log_step == log_step - 1:
-			tl.vis.save_images(bicycleGAN.vae_img.numpy(), [1, batch_size], os.path.join(sample_dir, 'vae_{}{}.png'.format(task, global_step)))
-			tl.vis.save_images(bicycleGAN.lr_img.numpy(), [1, batch_size], os.path.join(sample_dir, 'lr_{}{}.png'.format(task, global_step)))
+			vae_gen_samples.append(bicycleGAN.vae_img.numpy())#, [1, batch_size], os.path.join(sample_dir, 'vae_{}{}.png'.format(task, global_step)))
+			lr_gen_samples.append(bicycleGAN.lr_img.numpy())#, [1, batch_size], os.path.join(sample_dir, 'lr_{}{}.png'.format(task, global_step)))
 
 		if step % num_images == num_images - 1:
 			bicycleGAN.save(model_tag)
@@ -104,7 +106,7 @@ def train_one_task(train_data, task = "", use_aux_data = False):
 if mode == "continual" or "incremental":
 	print("{} tasks in total.".format(len(tasks)))
 	for i, task in enumerate(tasks):
-		print("Task {} ...".format(i + 1))
+		print("Task {} - {} ...".format(i + 1, task))
 		train_data = DataGenerator(task, "train")
 		with tf.device("/gpu:0"), writer.as_default():
 			if i > 0:
