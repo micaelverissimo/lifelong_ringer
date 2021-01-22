@@ -6,7 +6,7 @@ import tensorflow as tf
 parser = argparse.ArgumentParser(description="Run commands")
 parser.add_argument("--mode", default="continual", type=str, help="continual, incremental or joint")
 parser.add_argument("--batch_size", default=1, type=int)
-parser.add_argument("--image_size", default=128, type=int)
+parser.add_argument("--image_size", default=104, type=int)
 parser.add_argument("--tag", default="default", type=str)
 parser.add_argument("--epochs", default=5, type=int)
 parser.add_argument("--load_tag", default="", type=str)
@@ -16,7 +16,7 @@ parser.add_argument("--sample_dir", default="samples/", type=str)
 parser.add_argument("--gpu", default=0, type=int)
 parser.add_argument("--max_image_num", default=1200, type=int)
 parser.add_argument("--tasks", default="facades", type=str)
-parser.add_argument("--log_step", default=400, type=int)
+parser.add_argument("--log_step", default=500, type=int)
 parser.add_argument("--patch_size", default=8, type=int)
 
 arg = parser.parse_args()
@@ -56,7 +56,6 @@ patch_size = arg.patch_size
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
 	for gpu in gpus:
-		print('ENTREI!')
 		tf.config.experimental.set_memory_growth(gpu, True)
 	tf.config.experimental.set_visible_devices(gpus[arg.gpu], 'GPU')
 	logical_gpus = tf.config.experimental.list_logical_devices('CPU')

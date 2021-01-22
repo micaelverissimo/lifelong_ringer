@@ -7,7 +7,7 @@ from tensorlayer import logging
 
 from params import *
 
-lrelu = lambda x: tl.act.lrelu(x, 0.2)
+lrelu = lambda x: tl.act.lrelu(x, 0.01)
 
 class DeConv1d(Layer):
     """Simplified version of :class:`DeConv1dLayer`, see `tf.nn.conv1d_transpose <https://tensorflow.google.cn/versions/r2.0/api_docs/python/tf/nn/conv1d_transpose>`__.
@@ -151,18 +151,18 @@ def residual(R, n_f, f_s):
 def Discriminator(input_shape, prefix = ""):
 	I = Input(input_shape)
 	D = Conv1d(
-		64, 4, 2, padding='SAME', act=lrelu, b_init=None, name=prefix+'D_conv_1')(I)
+		64, 8, 2, padding='VALID', act=lrelu, b_init=None, name=prefix+'D_conv_1')(I)
 	D = InstanceNorm1d(act=lrelu)(Conv1d(
-		128, 4, 2, padding='SAME', b_init=None, name=prefix+'D_conv_2')(D))
+		128, 8, 2, padding='VALID', b_init=None, name=prefix+'D_conv_2')(D))
 	D = InstanceNorm1d(act=lrelu)(Conv1d(
-		256, 4, 2, padding='SAME', b_init=None, name=prefix+'D_conv_3')(D))
-	#D = InstanceNorm2d(act=lrelu)(Conv2d(
-	#	512, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_4')(D))
-	#D = InstanceNorm2d(act=lrelu)(Conv2d(
-	#	512, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_5')(D))
+		256, 8, 2, padding='VALID', b_init=None, name=prefix+'D_conv_3')(D))
+	#D = InstanceNorm1d(act=lrelu)(Conv1d(
+	#	100, 2, 1, padding='VALID', b_init=None, name=prefix+'D_conv_4')(D))
+	#D = InstanceNorm1d(act=lrelu)(Conv1d(
+	#	128, 2, 1, padding='VALID', b_init=None, name=prefix+'D_conv_5')(D))
 	#D = InstanceNorm2d(act=lrelu)(Conv2d(
 	#	512, (4, 4), (2, 2), padding='SAME', b_init=None, name=prefix+'D_conv_6')(D))
-	D = Conv1d(1, 4, 1, name=prefix+'D_conv_7')(D)
+	D = Conv1d(1, 8, 2, name=prefix+'D_conv_7')(D)
 	D = GlobalMeanPool1d()(D)
 	D_net = Model(inputs=I, outputs=D, name=prefix+'Discriminator')
 	return D_net
@@ -177,44 +177,42 @@ def Generator(input_shape, z_dim, prefix = ""):
 	z = Reshape((input_shape[0], 1, -1))(Z)
 	z = Tile([1, input_shape[1], 1])(z)
 
-	print('MICAEL: I, z', I.shape, z.shape)
 	conv_layers = []
 	G = Concat(concat_dim=-1)([I, z])
-	print('MICAEL: I, z, G', I.shape, z.shape, G.shape)
-	filters = [64, 128, 256]#, 512, 512, 512, 512]
+	
+	filters = [64, 128, 256]
 	if image_size == 256:
 		filters.append(512)
 	G = Conv1d(
-		filters[0], 4, 2, act=lrelu, W_init=w_init, b_init=None, name=prefix+'G_conv_1')(G)
+		filters[0], 8, 2, act=lrelu, W_init=w_init, b_init=None, name=prefix+'G_conv_1')(G)
 	conv_layers.append(G)
 	for i, n_f in enumerate(filters[1:]):
 		G = BatchNorm1d(act=lrelu)(Conv1d(
-			n_f, 4, 2, W_init=w_init, b_init=None, name=prefix+'G_conv_{}'.format(i + 2))(G))
+			n_f, 8, 2, W_init=w_init, b_init=None, name=prefix+'G_conv_{}'.format(i + 2))(G))
 		conv_layers.append(G)
 
 	filters.pop()
 	filters.reverse()
 	conv_layers.pop()
+
 	for i, n_f in enumerate(filters):
 		G = BatchNorm1d(act=tf.nn.relu)(DeConv1d(
-			n_f, 4, 2, W_init=w_init, b_init=None, name=prefix+'G_deconv_{}'.format(len(filters)+1-i))(G))
+			n_f, 8, 2, W_init=w_init, b_init=None, name=prefix+'G_deconv_{}'.format(len(filters)+1-i))(G))
 		G = Concat(concat_dim=-1)([G, conv_layers.pop()])
-	G = DeConv1d(3, 4, 2, act=tf.nn.tanh, W_init=w_init, b_init=None, name=prefix+'G_deconv_1')(G)
+	G = DeConv1d(1, 8, 2, act=tf.nn.tanh, W_init=w_init, b_init=None, name=prefix+'G_deconv_1')(G)
 	G_net = Model(inputs=[I, Z], outputs=G, name=prefix+'Generator')
 	return G_net
 
 
 def Encoder(input_shape, z_dim, prefix=""):
 	I = Input(input_shape)
-	print('ENCODER, I ', I.shape)
-	E = Conv1d(64, 4, 2, act=lrelu, name=prefix+'E_conv_1')(I)
-	print('E shape: ', E.shape)
-	E = MeanPool1d(2, 2, 'SAME')(residual(E, 128, 3))
-	E = MeanPool1d(2, 2, 'SAME')(residual(E, 256, 3))
+	E = Conv1d(64, 8, 2, act=lrelu, name=prefix+'E_conv_1')(I)
+	E = MeanPool1d(8, 2, 'VALID')(residual(E, 128, 2))
+	E = MeanPool1d(8, 2, 'VALID')(residual(E, 256, 2))
+	#E = MeanPool1d(2, 1, 'VALID')(residual(E, 100, 2))
+	#E = MeanPool1d(2, 1, 'VALID')(residual(E, 128, 2))
 	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
-	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
-	#E = MeanPool2d((2, 2), (2, 2), 'SAME')(residual(E, 512, 3))
-	E = Flatten()(MeanPool1d(8, 8, 'SAME')(E))
+	E = Flatten()(MeanPool1d(8, 8, 'VALID')(E))
 	mu = Dense(z_dim)(E)
 	log_sigma = Dense(z_dim)(E)
 	z = Elementwise(tf.add)(
@@ -248,7 +246,6 @@ class BicycleGAN(object):
 		tl.files.save_npz(self.E.all_weights, os.path.join(models_dir, "E_weights_{}.npz".format(model_tag)))
 
 	def calc_loss(self, image_A, image_B, z):
-		print('MICA, imagem_B', image_B.shape)
 		encoded_z, encoded_mu, encoded_log_sigma = self.E(image_B)
 		vae_img = self.G([image_A, encoded_z])
 		lr_img = self.G([image_A, z])
@@ -273,7 +270,7 @@ class BicycleGAN(object):
 		self.loss_G = loss_vae_G + loss_lr_G
 		self.loss_D = loss_vae_D + loss_lr_D
 		self.loss_vae_L1 = tl.cost.absolute_difference_error(
-			image_B, vae_img, is_mean=True, axis=[1, 2, 3])
+			image_B, vae_img, is_mean=True, axis=[1, 2])
 		self.loss_latent_L1 = tl.cost.absolute_difference_error(z, reconst_z, is_mean=True)
 		self.loss_kl_E = 0.5 * tf.reduce_mean(
 			-1 - 2 * encoded_log_sigma + encoded_mu**2 +
@@ -290,4 +287,3 @@ if __name__ == '__main__':
 	print(y.G)
 	print(y.D)
 	print(y.E)
-
