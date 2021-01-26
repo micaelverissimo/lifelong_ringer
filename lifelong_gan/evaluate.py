@@ -1,3 +1,5 @@
+import joblib
+
 from time import sleep
 
 import numpy as np
@@ -14,14 +16,16 @@ tl.files.exists_or_mkdir(os.path.join(sample_dir, "results"))
 
 def test_one_task(test_data, task = ""):
 	G.train()
+	generated_samples = []
 	num_images = len(test_data)
 	for i, (image_A, image_B) in zip(trange(0, num_images, batch_size), test_data(batch_size)):
-		images = [image_A, image_B]
-		for j in range(23):
+		#images = [image_A, image_B]
+		for j in range(10):
 			z = tf.random.normal(shape=(batch_size, z_dim))
-			image = G([image_A, z])
-			images.append(image)
-		tl.vis.save_images(np.concatenate(images), [5, 5], os.path.join(sample_dir, "results/{}{}.png".format(task, i)))
+			gen_sample = G([image_A, z])
+			generated_samples.append(gen_sample)
+	joblib.dump(generated_samples, os.path.join(sample_dir, "results/gen_samples_{}.jbl".format(task)))
+		#tl.vis.save_images(np.concatenate(images), [5, 5], os.path.join(sample_dir, "results/{}{}.png".format(task, i)))
 
 print("{} tasks in total.".format(len(tasks)))
 for i, task in enumerate(tasks):

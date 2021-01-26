@@ -11,16 +11,18 @@ from params import *
 dataset_dir = "../data/raw"
 
 data_dict = {
-	'low_mu'  : ('cond_low_mu_data17_trn_data.csv', 'low_mu_data17_trn_data.csv'),
-	'high_mu' : ('cond_high_mu_data17_trn_data.csv', 'high_mu_data17_trn_data.csv'),
+	'low_mu'      : ('cond_low_mu_data17_trn_data.csv', 'low_mu_data17_trn_data.csv'),
+	'tst_low_mu'  : ('cond_low_mu_data18_tst_data.csv', 'low_mu_data18_tst_data.csv'),
+	'high_mu'     : ('cond_high_mu_data17_trn_data.csv', 'high_mu_data17_trn_data.csv'),
+	'tst_high_mu' : ('cond_high_mu_data18_tst_data.csv', 'high_mu_data18_tst_data.csv'),
 
 }
-
 
 aux_dict = {
 	'low_mu'  : ('cond_low_mu_data17_trn_data_aux.csv', 'low_mu_data17_trn_data_aux.csv'),
 	'high_mu' : ('cond_high_mu_data17_trn_data_aux.csv', 'high_mu_data17_trn_data_aux.csv'),
-
+	'tst_low_mu'  : ('cond_low_mu_data17_trn_data_aux.csv', 'low_mu_data17_trn_data_aux.csv'),
+	'tst_high_mu' : ('cond_high_mu_data17_trn_data_aux.csv', 'high_mu_data17_trn_data_aux.csv'),
 }
 
 class DataGenerator(object):
